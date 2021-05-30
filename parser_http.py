@@ -39,8 +39,7 @@ def model_list(urls):
 
 def parser_model(url):
     url = url[0].split(';')
-    url = ['Kyocera', 'https://profit-msk.ru/kyocera-mita/zip/m2040dn.html', 'Kyocera ECOSYS M2040dn']
+    # url = ['Kyocera', 'https://profit-msk.ru/kyocera-mita/zip/m2040dn.html', 'Kyocera ECOSYS M2040dn']
     parser = ModelReferences(driver, url)
     parser.parser_partcodes()
-    print(url)
 

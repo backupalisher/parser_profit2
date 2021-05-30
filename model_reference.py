@@ -1,6 +1,9 @@
+import itertools
+import os
 import re
 import time
-import itertools
+import pandas
+import urllib.request
 
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -36,116 +39,118 @@ class ModelReferences(object):
 
         return models_list
 
+    # def text_proccesing(self):
+
     def parser_partcodes(self):
-        index = 0
-        self.driver.get(self.urls[1])
-        elements = self.driver.find_elements_by_xpath('//*[@id="jwts_tab"]/div[1]/div/table')
-        print(len(elements))
+        parsed_url = True
+        try:
+            with open(r"parser.log", "r") as file:
+                for line in file:
+                    if line == f'{self.urls[1]}\n':
+                        parsed_url = False
+                        print(self.urls[1], '- PARSED')
+        except:
+            pass
 
-        # self.driver.get(self.urls[1])
-        # self.driver.maximize_window()
-        clicks = self.driver.find_elements_by_class_name('tranfind')
-        print(len(clicks))
-        for clk in clicks:
-            # print(clk.get_attribute('outerHTML'))
-            clk.click()
-            time.sleep(1)
-        # hideDiv = WebDriverWait(self.driver, 10).until(EC.presence_of_element_located((By.ID, 'zzzzzzzzzz')))
-        # elements = self.driver.find_elements_by_xpath('//*[@id="jwts_tab"]/div[1]/div/table')
-        allm = self.driver.find_element_by_xpath(f'//*[@id="jwts_tab"]/div[1]/div').find_elements_by_xpath("./*")
-        # print(allm.text)
-        for i, elem in enumerate(allm, 1):
-            if i == 1:
-                continue
-            try:
-                module = elem.find_element_by_xpath(f'//*[@id="jwts_tab"]/div[1]/div/table[{i}]'
-                                                    f'/tbody/tr/td[@class="zip_t_caption brdimg"]').text
-            except:
-                pass
-            try:
-                if elem.find_element_by_class_name('brdimg'):
-                    print('Vendor', elem.text)
-            except:
-                pass
-            try:
-                analogs = elem.find_elements_by_xpath(f'//*[@id="zzzzzzzzzz"]/table/tbody/tr[@class="bcgrndclr"]')
-                for analog in analogs:
-                    a_vendor = analog.find_element_by_xpath(f'/td[1]')
-                    a_part_code = analog.find_element_by_xpath(f'/td[2]/strong/span')
-            except:
-                pass
-            '//*[@id="zzzzzzzzzz"]/table/tbody/tr[@class="bcgrndclr"]/td[1]'
-            '//*[@id="zzzzzzzzzz"]/table/tbody/tr[2]/td[2]/strong/span'
-            '//*[@id="zzzzzzzzzz"]/table/tbody/tr[2]/td[2]/text()'
-            '//*[@id="zzzzzzzzzz"]/table/tbody/tr[2]/td[4]'
-        # el = allm.find_element_by_xpath(f'//*[1]')
-        # print(el.text)
+        if parsed_url:
+            print(self.urls[2])
+            os.makedirs('res_data/{}'.format(self.urls[0]), exist_ok=True)
+            base_path = os.path.join('res_data', self.urls[0])
+            model_parts = []
+            self.driver.get(self.urls[1])
+            self.driver.maximize_window()
+            clicks = self.driver.find_elements_by_class_name('tranfind')
+            for clk in clicks:
+                clk.click()
+                time.sleep(.5)
+            allm = self.driver.find_element_by_xpath(f'//*[@id="jwts_tab"]/div[1]/div').find_elements_by_xpath(
+                "./*")
+            module = None
+            partcode = None
+            for elem in allm:
+                if elem.get_attribute('id') == 'zzzzzzzzzz':
+                    trs = elem.find_element_by_xpath(f'./*').find_element_by_xpath(
+                        f'./*').find_elements_by_xpath(f'./*')
+                else:
+                    trs = elem.find_element_by_xpath(f'./*').find_elements_by_xpath(f'./*')
+                for tr in trs:
+                    tds = tr.find_elements_by_xpath("./*")
+                    if len(tds) == 1 and 'Аналоги' not in tds[0].text:
+                        module = tds[0].text
+                        print(module)
+                    elif module and len(tds) > 1:
+                        if elem.get_attribute('id') == 'zzzzzzzzzz' and module:
+                            apartcode = tds[1].find_element_by_class_name('pbld').text.strip()
+                            avendor = tds[0].text.replace('• ', '').strip()
+                            aname = tds[1].text.replace(apartcode + ' - ', '').strip()
+                            adesc = ''
+                            if re.search(fr'\([^)]*\)', aname):
+                                adesc = re.search(fr'\([^)]*\)', aname).group(0).strip()
+                                aname = re.sub(fr'\([^)]*\)', '', aname).strip()
+                            elif re.search(fr'---(.|\n|\r)*---', aname):
+                                adesc = adesc + '\n' + re.search(fr'---(.|\n|\r)*---', aname).group(0).strip()
+                                aname = re.sub(fr'---(.|\n|\r)*---|\n|\r', '', aname)
+                            elif re.search(fr'\*', aname):
+                                adesc = adesc + '\n' + re.search(fr'\*.*', aname).group(0).strip()
+                                aname = re.sub(fr'\*.*', '', aname)
+                            elif re.search(fr'\n', aname):
+                                adesc = adesc + re.search(fr'\n.*', aname).group(0).strip()
+                                aname = re.sub(fr'\n.*', '', aname).strip()
+                            else:
+                                adesc = ''
+                            try:
+                                asrc = tds[2].find_element_by_css_selector('a').get_attribute('href')
+                                asrc_name = re.sub(fr'.*/', '', asrc)
+                                urllib.request.urlretrieve(asrc, os.path.join(base_path, f'{asrc_name}'))
+                            except:
+                                asrc_name = ''
+                            amodels = tds[2].find_elements_by_class_name('tztdclass')
+                            amodels_list = []
+                            for model in amodels:
+                                if model:
+                                    amodels_list.append(model.get_attribute('innerHTML'))
+                            aprice = re.sub(fr'[\D]', '', tds[3].text)
+                            amodels_list = ', '.join(m for m in amodels_list if m)
+                            model_parts.append(
+                                [module, avendor, apartcode, aname, adesc, aprice, amodels_list, aprice, asrc_name])
+                        elif module:
+                            partcode = tds[1].find_element_by_class_name('pbld').text.strip()
+                            vendor = tds[0].text.strip()
+                            name = tds[1].text.replace(partcode + ' - ', '').strip()
+                            desc = ''
+                            if re.search(fr'\([^)]*\)', name):
+                                desc = re.search(fr'\([^)]*\)', name).group(0).strip()
+                                name = re.sub(fr'\([^)]*\)', '', name).strip()
+                            elif re.search(fr'---(.|\n|\r)*---', name):
+                                desc = desc + '\n' + re.search(fr'---(.|\n|\r)*---', name).group(0).strip()
+                                name = re.sub(fr'---(.|\n|\r)*---|\n\r', '', name)
+                            elif re.search(fr'\*', name):
+                                desc = desc + '\n' + re.search(fr'\*.*', name).group(0).strip()
+                                name = re.sub(fr'\*.*', '', name)
+                            elif re.search(fr'\n', name):
+                                desc = desc + re.search(fr'\n.*', name).group(0).strip()
+                                name = re.sub(fr'\n.*', '', name).strip()
+                            else:
+                                desc = ''
+                            try:
+                                src = tds[2].find_element_by_css_selector('a').get_attribute('href')
+                                src_name = re.sub(fr'.*/', '', src)
+                                src_name = os.path.join(base_path, f'{src_name}')
+                                urllib.request.urlretrieve(src, src_name)
+                            except:
+                                src_name = ''
+                            models = tds[2].find_elements_by_class_name('tztdclass')
+                            models_list = []
+                            for model in models:
+                                if model:
+                                    models_list.append(model.get_attribute('innerHTML'))
+                            price = re.sub(fr'[\D]', '', tds[3].text)
+                            models_list = ', '.join(m for m in models_list if m)
+                            model_parts.append(
+                                [module, vendor, partcode, name, desc, price, models_list, price, src_name])
+            df = pandas.DataFrame(model_parts)
+            df.to_csv(os.path.join(base_path, f'{self.urls[2]}.csv'), index=False, mode='a',
+                      encoding='utf-8', header=False, sep=";")
 
-        # model_parts_list = []
-        # module = ''
-        #
-        # for el in elements:
-        #     index = index + 1
-        #
-        #     try:
-        #         if el.find_element_by_xpath(
-        #                 f'//*[@id="jwts_tab"]/div[1]/div/table[{index}]/tbody/tr/td[@class="zip_t_caption brdimg"]'):
-        #             module = el.find_element_by_xpath(
-        #                 f'//*[@id="jwts_tab"]/div[1]/div/table[{index}]/tbody/tr/td[@class="zip_t_caption brdimg"]').text
-        #     except:
-        #         pass
-        #     try:
-        #         vendor = el.find_element_by_xpath(
-        #             f'//*[@id="jwts_tab"]/div[1]/div/table[{index}]/tbody/tr/td[@class="brdimg"]').text
-        #     except:
-        #         vendor = ''
-        #     '//*[@id="jwts_tab"]/div[1]/div/table[11]/tbody/tr/td[4]'
-        #     try:
-        #         vendor_a = el.find_elements_by_xpath(f'//*[@id="jwts_tab"]/div[1]/div/table[{index}]'
-        #                                              f'/ancestor::div//*///*[@id="zzzzzzzzzz"]/table/tbody/tr"]').text
-        #         for i, v in enumerate(vendor_a, 1):
-        #             a_vendor = v.find_element_by_xpath(f'//*[@id="zzzzzzzzzz"]/table/tbody/tr[{i}]/td[1]').text
-        #             a_part_code = v.find_element_by_xpath(f'//*[@id="zzzzzzzzzz"]/table/tbody/tr[{i}]/td[2]/strong/span').text
-        #             a_part_code_name = v.find_element_by_xpath(f'//*[@id="zzzzzzzzzz"]/table/tbody/tr[{i}]/td[2]').text
-        #             a_price = v.find_element_by_xpath(f'//*[@id="zzzzzzzzzz"]/table/tbody/tr[{i}]/td[4]').text
-        #         print(vendor_a)
-        #     except:
-        #         vendor_a = ''
-        #     try:
-        #         part_code = el.find_element_by_xpath(
-        #             f'//*[@id="jwts_tab"]/div[1]/div/table[{index}]/tbody/tr/td[2]/strong/span').text
-        #     except:
-        #         part_code = ''
-        #     try:
-        #         part_code_name = el.find_element_by_xpath(
-        #             f'//*[@id="jwts_tab"]/div[1]/div/table[{index}]/tbody/tr/td[2]').text.\
-        #             replace(part_code + ' - ', '')
-        #
-        #         if re.search(f'\(.*|---', part_code_name):
-        #             desc = re.search(f'\((.|\n|\r)*.|---(.|\n|\r)*.', part_code_name).group(0).strip()
-        #             part_code_name = re.sub(f'\((.|\n|\r)*.|---(.|\n|\r)*.', '', part_code_name)
-        #             part_code_name = re.sub(f'\n|\r', '', part_code_name).strip()
-        #         else:
-        #             desc = ''
-        #     except:
-        #         part_code_name = ''
-        #         desc = ''
-        #     try:
-        #         price = int(el.find_element_by_xpath(
-        #             f'//*[@id="jwts_tab"]/div[1]/div/table[{index}]/tbody/tr/td[4]').text.replace(' \u20cf', '').\
-        #             replace('По запросу', ''))
-        #     except:
-        #         price = ''
-        #
-        #     if module and vendor and part_code and part_code_name:
-        #         model_parts_list.append({
-        #             'module': module,
-        #             'vendor': vendor,
-        #             'part_code': part_code,
-        #             'part_code_name': part_code_name,
-        #             'desc': desc,
-        #             'price': price,
-        #         })
-        #
-        # for i in model_parts_list:
-        #     print(i)
+            with open(r"parser.log", "a") as file:
+                file.write(self.urls[1] + '\n')

@@ -21,8 +21,6 @@ def parse_model():
         models_links = utils.load_csv('res', f'{file}')
         for model in models_links:
             parser_http.parser_model(model)
-            break
-        break
 
 
 def main():
